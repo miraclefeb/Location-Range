@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>地理范围圈选-高德</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .app { display: flex; height: 100%; min-height: 0; }
+    #sidebar {
+      width: 340px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #f7f8fa;
+      border-right: 1px solid #e8e8e8;
+      z-index: 10;
+    }
+    #sidebar .head {
+      padding: 14px 14px 10px;
+      background: #fff;
+      border-bottom: 1px solid #eee;
+    }
+    #sidebar h1 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: #1a1a1a; }
+    #sidebar .intro { margin: 0; font-size: 12px; color: #666; line-height: 1.5; }
+    #sidebar label { display: block; margin-top: 10px; font-size: 12px; font-weight: 500; color: #333; }
+    #sidebar input[type="text"],
+    #sidebar input[type="password"] {
+      width: 100%;
+      margin-top: 4px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .key-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+      margin-top: 4px;
+    }
+    .key-row input {
+      flex: 1;
+      min-width: 0;
+      margin-top: 0 !important;
+    }
+    .key-row button {
+      flex-shrink: 0;
+      align-self: stretch;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    button {
+      padding: 7px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #1890ff;
+      color: #fff;
+    }
+    button:hover { background: #40a9ff; }
+    button.secondary { background: #f0f0f0; color: #333; }
+    button.secondary:hover { background: #e0e0e0; }
+    button.danger { background: #fff1f0; color: #cf1322; border: 1px solid #ffccc7; }
+    button.danger:hover { background: #ffe7e6; }
+    #pinListWrap {
+      flex: 1;
+      min-height: 120px;
+      overflow: auto;
+      padding: 10px 12px;
+    }
+    #pinListWrap h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #333; }
+    .pin-empty { font-size: 12px; color: #999; padding: 8px 0; }
+    .pin-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #eee;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pin-item:hover { background: #fafafa; border-color: #e0e0e0; }
+    .pin-item.active {
+      background: #fff1f0;
+      border-color: #ffa39e;
+      box-shadow: 0 0 0 1px rgba(255, 77, 79, 0.25);
+    }
+    .pin-item .idx { width: 22px; color: #888; flex-shrink: 0; }
+    .pin-item .coord { flex: 1; min-width: 0; font-family: ui-monospace, monospace; color: #333; word-break: break-all; }
+    .pin-item .mini { padding: 2px 6px; font-size: 11px; }
+    .sidebar-foot {
+      padding: 12px 14px;
+      background: #fff;
+      border-top: 1px solid #eee;
+    }
+    #msg { margin-top: 8px; font-size: 11px; line-height: 1.4; word-break: break-all; }
+    #msg.error { color: #cf1322; }
+    #msg.ok { color: #389e0d; }
+    #map { flex: 1; min-width: 0; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside id="sidebar">
+      <div class="head">
+        <h1>地理范围圈选-高德</h1>
+        <p class="intro">输入地址并「定位到此处」可跳到目标区域，再用右上角缩放条或滚轮放大缩小后点击地图落点；拖动大头针微调。至少 3 个点形成闭合范围。</p>
+        <label for="key">Web 端 Key（<a href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener">控制台</a>）</label>
+        <div class="key-row">
+          <input type="password" id="key" placeholder="已保存则自动填入；点「显示」可查看或粘贴" autocomplete="off" spellcheck="false" />
+          <button type="button" id="btnToggleKey" class="secondary" title="显示或隐藏 Key">显示</button>
+        </div>
+        <label for="address">地址 / 地点名称</label>
+        <input type="text" id="address" placeholder="例如：长沙市岳麓区梅溪湖" autocomplete="off" />
+        <div class="btn-row">
+          <button type="button" id="btnGeocode">定位到此处</button>
+          <button type="button" id="btnInit" class="secondary">仅初始化地图</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btnSample" class="secondary">加载示例 11 点</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btnClearPins" class="danger">清空全部大头针</button>
+        </div>
+        <div id="msg"></div>
+      </div>
+      <div id="pinListWrap">
+        <h2>大头针坐标（顺序 = 围成多边形的顶点顺序）</h2>
+        <div id="pinList" class="pin-empty">暂无大头针，初始化地图后点击地图添加。</div>
+      </div>
+      <div class="sidebar-foot">
+        <div class="btn-row">
+          <button type="button" id="btnExport">导出 CSV（顺时针括号串）</button>
+        </div>
+      </div>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script>
+    (function () {
+      var STORAGE_KEY = "amap_web_key_coord_verify";
+      /** 不在仓库中写死 Key；运营首次打开页面粘贴后写入 localStorage */
+      var DEFAULT_KEY = "";
+      var SAMPLE_POINTS = [
+        [112.936761, 28.222576],
+        [112.947551, 28.222275],
+        [112.946104, 28.22302],
+        [112.94806, 28.222247],
+        [112.947414, 28.217873],
+        [112.939228, 28.217241],
+        [112.939996, 28.211405],
+        [112.934774, 28.212074],
+        [112.936282, 28.214886],
+        [112.936332, 28.21877],
+        [112.93817, 28.222185]
+      ];
+
+      var map = null;
+      var polygon = null;
+      var pins = [];
+      var nextId = 1;
+      var mapClickBound = false;
+      var mapControlsAdded = false;
+      var selectedPinId = null;
+
+      /** 与 HTML 同目录放置 pin-marker-icon.png；显示尺寸与锚点（底部中心对准坐标） */
+      var PIN_ICON_IMG = "pin-marker-icon.png";
+      var PIN_ICON_W = 24;
+      var PIN_ICON_H = 24;
+
+      var keyInput = document.getElementById("key");
+      var addressInput = document.getElementById("address");
+      var msgEl = document.getElementById("msg");
+      var pinListEl = document.getElementById("pinList");
+
+      try {
+        var saved = localStorage.getItem(STORAGE_KEY);
+        keyInput.value = saved || DEFAULT_KEY;
+      } catch (e) {
+        keyInput.value = DEFAULT_KEY;
+      }
+
+      document.getElementById("btnToggleKey").addEventListener("click", function () {
+        var isPwd = keyInput.getAttribute("type") === "password";
+        keyInput.setAttribute("type", isPwd ? "text" : "password");
+        this.textContent = isPwd ? "隐藏" : "显示";
+      });
+
+      function setMsg(text, cls) {
+        msgEl.className = cls || "";
+        msgEl.textContent = text || "";
+      }
+
+      function loadScript(key, cb) {
+        if (window.AMap) {
+          cb();
+          return;
+        }
+        var s = document.createElement("script");
+        s.src = "https://webapi.amap.com/maps?v=2.0&key=" + encodeURIComponent(key);
+        s.onload = function () { cb(); };
+        s.onerror = function () {
+          setMsg("加载高德 JS API 失败，请检查 Key 与 Referer 白名单。", "error");
+        };
+        document.head.appendChild(s);
+      }
+
+      function ensureClosedPath(path) {
+        if (path.length < 2) return path.slice();
+        var a = path[0];
+        var b = path[path.length - 1];
+        if (a[0] === b[0] && a[1] === b[1]) return path.slice();
+        return path.concat([[a[0], a[1]]]);
+      }
+
+      /** 平面近似：当前顶点序的环，若为逆时针则反转为顺时针 */
+      function toClockwiseOrder(ringOpen) {
+        if (ringOpen.length < 3) return ringOpen.slice();
+        var ring = ringOpen.slice();
+        var twice = 0;
+        var n = ring.length;
+        for (var i = 0; i < n; i++) {
+          var j = (i + 1) % n;
+          twice += ring[i][0] * ring[j][1] - ring[j][0] * ring[i][1];
+        }
+        if (twice > 0) ring.reverse();
+        return ring;
+      }
+
+      function formatParenString(ring) {
+        return ring
+          .map(function (p) {
+            return "(" + p[0] + "," + p[1] + ")";
+          })
+          .join(",");
+      }
+
+      function refreshPolygon() {
+        if (!map) return;
+        if (polygon) {
+          map.remove(polygon);
+          polygon = null;
+        }
+        if (pins.length === 0) {
+          setMsg("请添加大头针。", "");
+          return;
+        }
+        if (pins.length < 3) {
+          setMsg(
+            pins.length < 2 ? "至少再添加 1 个点。" : "至少 3 个点形成闭合范围；当前可继续点击添加。",
+            ""
+          );
+          return;
+        }
+        var path = pins.map(function (x) {
+          return [x.lng, x.lat];
+        });
+        var closed = ensureClosedPath(path);
+        polygon = new AMap.Polygon({
+          path: closed.map(function (p) {
+            return new AMap.LngLat(p[0], p[1]);
+          }),
+          strokeColor: "#1890ff",
+          strokeWeight: 2,
+          strokeOpacity: 0.9,
+          fillColor: "#1890ff",
+          fillOpacity: 0.22,
+          zIndex: 50
+        });
+        map.add(polygon);
+        AMap.plugin("AMap.GeometryUtil", function () {
+          var ring = closed.map(function (p) {
+            return [p[0], p[1]];
+          });
+          var areaM2 = Math.abs(AMap.GeometryUtil.ringArea(ring));
+          var areaKm2 = areaM2 / 1e6;
+          setMsg(
+            "顶点 " +
+              pins.length +
+              " 个；约面积 " +
+              areaKm2.toFixed(4) +
+              " km²。导出时顶点将按顺时针重排。",
+            "ok"
+          );
+        });
+      }
+
+      function buildMarkerContent(isSelected) {
+        var scale = isSelected ? 1.18 : 1;
+        var ringStyle = isSelected
+          ? "box-shadow:0 0 0 2px #ff4d4f,0 3px 7px rgba(255,77,79,0.45);border-radius:50%;"
+          : "";
+        var badge = isSelected
+          ? '<span style="position:absolute;right:-2px;top:-2px;width:6px;height:6px;background:#ff4d4f;border:1px solid #fff;border-radius:50%"></span>'
+          : "";
+        return (
+          '<div style="position:relative;width:' +
+          PIN_ICON_W +
+          "px;height:" +
+          PIN_ICON_H +
+          "px;transform:scale(" +
+          scale +
+          ");transform-origin:50% 100%;" +
+          ringStyle +
+          '">' +
+          '<img src="' +
+          PIN_ICON_IMG +
+          '" width="' +
+          PIN_ICON_W +
+          '" height="' +
+          PIN_ICON_H +
+          '" alt="" style="display:block;pointer-events:none"/>' +
+          badge +
+          "</div>"
+        );
+      }
+
+      function applyAllMarkerStyles() {
+        pins.forEach(function (pin) {
+          if (!pin.marker) return;
+          var sel = pin.id === selectedPinId;
+          pin.marker.setContent(buildMarkerContent(sel));
+          pin.marker.setOffset(new AMap.Pixel(-PIN_ICON_W / 2, -PIN_ICON_H));
+          pin.marker.setzIndex(sel ? 220 : 110);
+        });
+      }
+
+      function selectPin(id) {
+        if (!map) return;
+        var exists = false;
+        pins.forEach(function (p) {
+          if (p.id === id) exists = true;
+        });
+        if (!exists) return;
+        selectedPinId = id;
+        applyAllMarkerStyles();
+        var target = null;
+        pins.forEach(function (p) {
+          if (p.id === id) target = p;
+        });
+        if (target && target.marker) {
+          map.panTo(target.marker.getPosition());
+        }
+        refreshPinList();
+      }
+
+      function refreshPinList() {
+        if (pins.length === 0) {
+          pinListEl.className = "pin-empty";
+          pinListEl.textContent = "暂无大头针，点击地图添加。";
+          return;
+        }
+        pinListEl.className = "";
+        pinListEl.innerHTML = "";
+        pins.forEach(function (pin, index) {
+          var row = document.createElement("div");
+          row.className = "pin-item" + (pin.id === selectedPinId ? " active" : "");
+          row.setAttribute("data-pin-id", String(pin.id));
+          row.innerHTML =
+            '<span class="idx">#' +
+            (index + 1) +
+            '</span><span class="coord">' +
+            pin.lng.toFixed(6) +
+            ", " +
+            pin.lat.toFixed(6) +
+            '</span>';
+          var btns = document.createElement("span");
+          btns.style.display = "flex";
+          btns.style.gap = "4px";
+          btns.style.flexShrink = "0";
+          if (index > 0) {
+            var up = document.createElement("button");
+            up.type = "button";
+            up.className = "secondary mini";
+            up.textContent = "↑";
+            up.title = "上移";
+            up.onclick = function (ev) {
+              ev.stopPropagation();
+              movePin(index, -1);
+            };
+            btns.appendChild(up);
+          }
+          if (index < pins.length - 1) {
+            var down = document.createElement("button");
+            down.type = "button";
+            down.className = "secondary mini";
+            down.textContent = "↓";
+            down.title = "下移";
+            down.onclick = function (ev) {
+              ev.stopPropagation();
+              movePin(index, 1);
+            };
+            btns.appendChild(down);
+          }
+          var del = document.createElement("button");
+          del.type = "button";
+          del.className = "danger mini";
+          del.textContent = "删";
+          del.title = "删除此大头针";
+          del.onclick = function (ev) {
+            ev.stopPropagation();
+            removePin(pin.id);
+          };
+          btns.appendChild(del);
+          row.appendChild(btns);
+          row.addEventListener("click", function () {
+            selectPin(pin.id);
+          });
+          pinListEl.appendChild(row);
+        });
+      }
+
+      function movePin(index, delta) {
+        var j = index + delta;
+        if (j < 0 || j >= pins.length) return;
+        var t = pins[index];
+        pins[index] = pins[j];
+        pins[j] = t;
+        refreshPolygon();
+        refreshPinList();
+      }
+
+      function addMapControls() {
+        if (!map || mapControlsAdded) return;
+        AMap.plugin(["AMap.ToolBar", "AMap.Scale"], function () {
+          map.addControl(new AMap.ToolBar());
+          map.addControl(new AMap.Scale());
+          mapControlsAdded = true;
+        });
+      }
+
+      function removePin(id) {
+        if (selectedPinId === id) selectedPinId = null;
+        for (var i = 0; i < pins.length; i++) {
+          if (pins[i].id === id) {
+            if (map && pins[i].marker) map.remove(pins[i].marker);
+            pins.splice(i, 1);
+            break;
+          }
+        }
+        refreshPolygon();
+        refreshPinList();
+        applyAllMarkerStyles();
+      }
+
+      function addPin(lng, lat) {
+        if (!map) return;
+        var id = nextId++;
+        var marker = new AMap.Marker({
+          position: new AMap.LngLat(lng, lat),
+          content: buildMarkerContent(false),
+          offset: new AMap.Pixel(-PIN_ICON_W / 2, -PIN_ICON_H),
+          draggable: true,
+          cursor: "pointer",
+          title: "点击选中；拖动调整位置",
+          zIndex: 110
+        });
+        marker.setMap(map);
+        marker.on("click", function (e) {
+          if (e && e.stopPropagation) e.stopPropagation();
+          selectPin(id);
+        });
+        marker.on("dragend", function () {
+          var p = marker.getPosition();
+          for (var k = 0; k < pins.length; k++) {
+            if (pins[k].id === id) {
+              pins[k].lng = p.getLng();
+              pins[k].lat = p.getLat();
+              break;
+            }
+          }
+          refreshPolygon();
+          refreshPinList();
+        });
+        pins.push({ id: id, lng: lng, lat: lat, marker: marker });
+        selectedPinId = id;
+        applyAllMarkerStyles();
+        refreshPolygon();
+        refreshPinList();
+      }
+
+      function clearAllPins() {
+        if (!map) return;
+        selectedPinId = null;
+        pins.forEach(function (p) {
+          if (p.marker) map.remove(p.marker);
+        });
+        pins = [];
+        if (polygon) {
+          map.remove(polygon);
+          polygon = null;
+        }
+        setMsg("已清空。", "");
+        refreshPinList();
+      }
+
+      function bindMapClick() {
+        if (!map || mapClickBound) return;
+        map.on("click", function (e) {
+          var ll = e.lnglat;
+          addPin(ll.getLng(), ll.getLat());
+        });
+        mapClickBound = true;
+      }
+
+      function initMap(cb) {
+        var key = keyInput.value.trim();
+        if (!key) {
+          setMsg("请填写高德 Web 端 Key。", "error");
+          return;
+        }
+        try {
+          localStorage.setItem(STORAGE_KEY, key);
+        } catch (err) {}
+
+        loadScript(key, function () {
+          if (!map) {
+            map = new AMap.Map("map", {
+              zoom: 15,
+              center: [112.94, 28.217],
+              viewMode: "2D"
+            });
+            bindMapClick();
+            addMapControls();
+          }
+          window.addEventListener("resize", function () {
+            if (map) map.resize();
+          });
+          if (cb) cb();
+        });
+      }
+
+      function loadSamplePoints() {
+        if (!map) {
+          setMsg("请先初始化地图。", "error");
+          return;
+        }
+        clearAllPins();
+        SAMPLE_POINTS.forEach(function (p) {
+          addPin(p[0], p[1]);
+        });
+        if (polygon) map.setFitView([polygon], false, [20, 20, 20, 360]);
+        setMsg("已加载示例 11 点。", "ok");
+      }
+
+      function goToAddress() {
+        var addr = addressInput.value.trim();
+        if (!addr) {
+          setMsg("请输入地址或地点名称。", "error");
+          return;
+        }
+        initMap(function () {
+          AMap.plugin("AMap.Geocoder", function () {
+            var geocoder = new AMap.Geocoder({ city: "全国" });
+            geocoder.getLocation(addr, function (status, result) {
+              if (status === "complete" && result.geocodes && result.geocodes.length) {
+                var g = result.geocodes[0];
+                var loc = g.location;
+                if (loc && typeof loc.getLng === "function") {
+                  map.setCenter(loc);
+                } else if (loc && loc.lng != null) {
+                  map.setCenter([loc.lng, loc.lat]);
+                } else {
+                  setMsg("地理编码返回格式异常。", "error");
+                  return;
+                }
+                map.setZoom(17);
+                var label = g.formattedAddress || g.address || addr;
+                setMsg("已定位：" + label + "。可用缩放条/滚轮调整后再点击地图打大头针。", "ok");
+              } else {
+                setMsg("未找到该地点，请换更具体的地址或关键词。", "error");
+              }
+            });
+          });
+        });
+      }
+
+      document.getElementById("btnGeocode").addEventListener("click", goToAddress);
+
+      addressInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          goToAddress();
+        }
+      });
+
+      document.getElementById("btnInit").addEventListener("click", function () {
+        initMap(function () {
+          setMsg("地图已就绪：点击地图添加大头针。", "ok");
+          if (pins.length && polygon) map.setFitView([polygon], false, [20, 20, 20, 360]);
+        });
+      });
+
+      document.getElementById("btnSample").addEventListener("click", function () {
+        initMap(function () {
+          loadSamplePoints();
+        });
+      });
+
+      document.getElementById("btnClearPins").addEventListener("click", function () {
+        if (!map) {
+          setMsg("请先初始化地图。", "error");
+          return;
+        }
+        clearAllPins();
+      });
+
+      document.getElementById("btnExport").addEventListener("click", function () {
+        if (pins.length === 0) {
+          setMsg("没有可导出的大头针。", "error");
+          return;
+        }
+        var ringOpen = pins.map(function (p) {
+          return [p.lng, p.lat];
+        });
+        var cw = toClockwiseOrder(ringOpen);
+        var body = formatParenString(cw);
+        var csv = "coordinates\n\"" + body.replace(/"/g, '""') + "\"\n";
+        var blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "amap_pins_clockwise.csv";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setMsg("已下载 amap_pins_clockwise.csv（UTF-8 BOM）。", "ok");
+      });
+    })();
+  </script>
+</body>
+</html>
